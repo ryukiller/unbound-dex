@@ -1,9 +1,9 @@
 // Bump VERSION whenever app files or data change.
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL = `shell-${VERSION}`;
 const IMG = "img-v1";
 const CORE = ["./", "index.html", "styles.css", "app.js", "manifest.webmanifest",
-  "data/dex.json", "data/moves.json", "data/meta.json", "icons/icon-192.png"];
+  "data/dex.json", "data/moves.json", "data/meta.json", "data/places.json", "data/gyms.json", "icons/icon-192.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));

@@ -11,3 +11,8 @@ for f in pokemon pokemon_species pokemon_species_names pokemon_stats moves move_
   ability_names ability_flavor_text types type_names items item_names; do
   curl -sL "https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/$f.csv" -o "csv/$f.csv"
 done
+mkdir -p gyms
+for u in gyms/dresco-town-gym gyms/crater-town-gym gyms/blizzard-city-gym gyms/fallshore-city-gym gyms/dehara-city-gym \
+  gyms/antisis-city-gym gyms/polder-town-gym gyms/redwood-village-gym elite-four; do
+  curl -sL "https://unboundwiki.com/$u/" -o "gyms/$(echo $u | tr / _).html"
+done
