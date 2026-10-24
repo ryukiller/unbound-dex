@@ -44,9 +44,14 @@ const store = {
 
 let DEX = [], MOVES = {}, META = {}, BY_ID = new Map();
 const state = {
-  lang: store.get("lang", "en"), q: "", types: new Set(), gen: 0, how: "", move: "", sort: "dex",
+  lang: store.get("lang", "en"), own: "", q: "", types: new Set(), gen: 0, how: "", move: "", sort: "dex",
 };
 let cards = [], current = null, learnTab = "lv", artMode = store.get("art", "art");
+const TEAM_MAX = 6;
+const load = (k, d) => { try { return JSON.parse(store.get(k, "")) ?? d; } catch { return d; } };
+let team = load("team", []);
+const caught = new Set(load("caught", []));
+const OWN = [["", "Tutti"], ["team", "Squadra"], ["caught", "Catturati"], ["uncaught", "Non catturati"]];
 
 const L = (p, k = "") => state.lang === "it" ? (p[k + "it"] ?? p[k + "en"]) : p[k + "en"];
 const other = (p, k = "") => state.lang === "it" ? p[k + "en"] : (p[k + "it"] ?? p[k + "en"]);
@@ -83,13 +88,16 @@ async function boot() {
     p.hay = fold([p.en, p.it, ...p.types, ...p.types.map(t => META.type_it?.[t] || ""),
       ...p.abil.flatMap(a => [a.en, a.it]), ...p.loc, ...p.locIt].join(" | "));
   });
+  team = team.filter(id => BY_ID.has(id)).slice(0, TEAM_MAX);
   buildChrome();
   buildGrid();
+  renderTeambar();
   apply();
   route();
 }
 
 function buildChrome() {
+  const fb = $("#filterBtn");
   const chips = $("#typeChips");
   chips.innerHTML = TYPES.map(t =>
     `<button class="chip" type="button" data-t="${t}" style="--c:var(--t-${t})"><i></i><span>${esc(typeName(t))}</span></button>`).join("");
@@ -109,6 +117,18 @@ function buildChrome() {
     [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x === b));
     apply(true);
   });
+  $("#ownSeg").innerHTML = OWN.map(([k, v], i) => `<button class="${i ? "" : "on"}" data-o="${k}">${v}</button>`).join("");
+  $("#ownSeg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.own = b.dataset.o;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x === b));
+    apply(true);
+  });
+  $("#filtersDone").addEventListener("click", () => { $("#filters").hidden = true; fb.setAttribute("aria-expanded", "false"); });
+  $("#teambar").addEventListener("click", e => {
+    const b = e.target.closest("[data-go],.an"); if (!b) return;
+    b.dataset.go ? openDetail(b.dataset.go) : openTeam();
+  });
   $("#howSeg").innerHTML = `<button class="on" data-h="">Tutti</button>` +
     HOW.map(([k, v]) => `<button data-h="${k}">${v}</button>`).join("");
   $("#howSeg").addEventListener("click", e => {
@@ -126,7 +146,6 @@ function buildChrome() {
   $("#sort").addEventListener("change", e => { state.sort = e.target.value; apply(true); });
   $("#reset").addEventListener("click", resetFilters);
 
-  const fb = $("#filterBtn");
   fb.setAttribute("aria-expanded", "false");
   fb.addEventListener("click", () => {
     const p = $("#filters"); p.hidden = !p.hidden;
@@ -149,6 +168,7 @@ function buildChrome() {
   top.addEventListener("click", () => scrollTo({ top: 0, behavior: "smooth" }));
 
   $("#back").addEventListener("click", closeDetail);
+  $("#closeAll").addEventListener("click", closeAll);
   $("#sheetSearch").addEventListener("click", () => {
     const q = $("#q");
     q.focus({ preventScroll: true }); // inside the tap so iOS opens the keyboard
@@ -159,9 +179,9 @@ function buildChrome() {
 }
 
 function resetFilters() {
-  state.types.clear(); state.gen = 0; state.how = ""; state.move = ""; state.sort = "dex";
+  state.types.clear(); state.gen = 0; state.how = ""; state.own = ""; state.move = ""; state.sort = "dex";
   document.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on"));
-  for (const seg of ["#genSeg", "#howSeg"]) [...$(seg).children].forEach((x, i) => x.classList.toggle("on", i === 0));
+  for (const seg of ["#genSeg", "#howSeg", "#ownSeg"]) [...$(seg).children].forEach((x, i) => x.classList.toggle("on", i === 0));
   $("#moveQ").value = ""; $("#sort").value = "dex";
   apply(true);
 }
@@ -172,7 +192,8 @@ function toggleLang() {
   document.body.dataset.lang = state.lang;
   cards.forEach((c, i) => { c.nm.textContent = L(DEX[i]); c.el.setAttribute("aria-label", L(DEX[i])); });
   document.querySelectorAll(".chip span").forEach(s => { s.textContent = typeName(s.parentNode.dataset.t); });
-  if (current) renderDetail(current, true);
+  renderTeambar();
+  rerender();
 }
 
 /* ------------------------------------------------------------------ grid */
@@ -185,11 +206,13 @@ function buildGrid() {
     el.setAttribute("aria-label", L(p));
     el.innerHTML = `<span class="num">${dexNo(p.dex)}</span>` +
       `<img loading="lazy" decoding="async" width="88" height="88" alt="" src="${SPR(p.spr)}">` +
-      `<div class="nm"></div><div class="types">${p.types.map(t => `<span class="dot" style="--c:var(--t-${t})"></span>`).join("")}</div>`;
+      `<div class="nm"></div><div class="types">${p.types.map(t => `<span class="dot" style="--c:var(--t-${t})"></span>`).join("")}</div>` +
+      `<span class="mk"></span>`;
     const nm = el.querySelector(".nm"); nm.textContent = L(p);
     frag.appendChild(el);
-    return { el, nm };
+    return { el, nm, mk: el.querySelector(".mk") };
   });
+  DEX.forEach(refreshMark);
   const grid = $("#grid");
   grid.appendChild(frag);
   grid.addEventListener("click", e => {
@@ -224,6 +247,7 @@ function apply(scroll) {
     if (ok && range) ok = p.dex >= range[0] && p.dex <= range[1];
     if (ok && state.how) ok = p.how.has(state.how);
     if (ok && mv) ok = [...mv].some(m => p.moveset.has(m));
+    if (ok && state.own) ok = state.own === "team" ? team.includes(p.id) : state.own === "caught" ? caught.has(p.id) : !caught.has(p.id);
     cards[i].el.hidden = !ok;
     if (ok) { shown++; vis.push(p); }
   });
@@ -234,9 +258,10 @@ function apply(scroll) {
   const sig = state.sort + state.lang;
   if (grid.dataset.sig !== sig) { order.forEach(p => grid.appendChild(cards[p.i].el)); grid.dataset.sig = sig; }
 
-  const n = (state.types.size ? 1 : 0) + (state.gen ? 1 : 0) + (state.how ? 1 : 0) + (mv ? 1 : 0) + (state.sort !== "dex" ? 1 : 0);
+  const n = (state.types.size ? 1 : 0) + (state.gen ? 1 : 0) + (state.how ? 1 : 0) + (state.own ? 1 : 0) + (mv ? 1 : 0) + (state.sort !== "dex" ? 1 : 0);
   const fc = $("#filterCount"); fc.hidden = !n; fc.textContent = n;
-  $("#count").textContent = `${shown} Pokémon` + (shown !== DEX.length ? ` su ${DEX.length}` : "");
+  $("#count").textContent = `${shown} Pokémon` + (shown !== DEX.length ? ` su ${DEX.length}` : "") +
+    (caught.size ? ` · ✓ ${caught.size} ${caught.size === 1 ? "catturato" : "catturati"}` : "");
   $("#empty").hidden = shown > 0;
   if (scroll) {
     const y = $("main").offsetTop - $("#top").offsetHeight;
@@ -245,21 +270,31 @@ function apply(scroll) {
 }
 
 /* ------------------------------------------------------------------ routing */
-function openDetail(id) {
-  history.pushState({ dex: 1 }, "", "#/p/" + encodeURIComponent(id));
+// history.state.dex = how many sheet pages we pushed on top of the list
+function push(hash) {
+  history.pushState({ dex: (history.state?.dex || 0) + 1 }, "", hash);
+  route();
+}
+const openDetail = id => push("#/p/" + encodeURIComponent(id));
+const openTeam = () => push("#/team");
+function toList() {
+  history.replaceState(null, "", location.pathname + location.search);
   route();
 }
 function closeDetail() {
   // entries we pushed can be popped (phone back button works too); a deep link is replaced instead
-  if (history.state?.dex) history.back();
-  else { history.replaceState(null, "", location.pathname + location.search); route(); }
+  if (history.state?.dex) history.back(); else toList();
+}
+function closeAll() {
+  const n = history.state?.dex || 0;
+  if (n) history.go(-n); else toList();
 }
 function route() {
   const m = location.hash.match(/^#\/p\/(.+)$/);
-  const p = m && BY_ID.get(decodeURIComponent(m[1]));
+  const p = location.hash === "#/team" ? "team" : m && BY_ID.get(decodeURIComponent(m[1]));
   const sheet = $("#sheet");
   if (p) {
-    renderDetail(p);
+    p === "team" ? renderTeam() : renderDetail(p);
     sheet.classList.add("open"); sheet.setAttribute("aria-hidden", "false");
     document.documentElement.style.overflow = "hidden";
   } else {
@@ -359,6 +394,10 @@ function renderDetail(p, keepScroll) {
       <h2>${esc(L(p))}</h2>
       <div class="alt">${esc(other(p) !== L(p) ? other(p) : (it ? "Nome uguale in inglese" : "Same name in Italian"))}</div>
       <div class="types">${p.types.map(t => typeBadge(t)).join("")}</div>
+      <div class="acts">
+        <button type="button" class="act team ${team.includes(p.id) ? "on" : ""}" data-act="team">${team.includes(p.id) ? "★ In squadra" : "☆ Aggiungi alla squadra"}</button>
+        <button type="button" class="act caught ${caught.has(p.id) ? "on" : ""}" data-act="caught">${caught.has(p.id) ? "✓ Catturato" : "○ Catturato"}</button>
+      </div>
     </div>
     <section class="sec"><h3>📍 Dove trovarlo <small>(Unbound)</small></h3>${locHtml}</section>
     <section class="sec"><h3>🔁 Evoluzioni</h3>${evoHtml}</section>
@@ -386,8 +425,13 @@ function renderDetail(p, keepScroll) {
 }
 
 $("#detail").addEventListener("click", e => {
+  const act = e.target.closest("[data-act]");
+  if (act) { act.dataset.act === "team" ? toggleTeam(current.id) : toggleCaught(current.id); rerender(); return; }
+  const rm = e.target.closest("[data-rm]");
+  if (rm) { e.stopPropagation(); toggleTeam(rm.dataset.rm); rerender(); return; }
   const go = e.target.closest("[data-go]");
   if (go) { const id = go.dataset.go; if (BY_ID.has(id) && id !== current?.id) openDetail(id); return; }
+  if (e.target.closest("[data-addteam]")) { closeAll(); return; }
   const mv = e.target.closest(".mv");
   if (mv) { mv.classList.toggle("open"); return; }
   const tab = e.target.closest("#ltabs button");
@@ -397,6 +441,92 @@ $("#detail").addEventListener("click", e => {
     $("#ltable").innerHTML = learnTable(current);
   }
 });
+
+/* ------------------------------------------------------------------ team & caught */
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
+}
+function refreshMark(p) {
+  cards[p.i].mk.innerHTML = (team.includes(p.id) ? '<span class="t">★</span>' : "") + (caught.has(p.id) ? '<span class="c">✓</span>' : "");
+}
+function toggleTeam(id) {
+  const p = BY_ID.get(id);
+  if (team.includes(id)) team = team.filter(x => x !== id);
+  else if (team.length >= TEAM_MAX) { toast(`La squadra è piena (max ${TEAM_MAX}). Togline uno prima.`); return; }
+  else { team.push(id); toast(`${L(p)} aggiunto alla squadra`); }
+  store.set("team", JSON.stringify(team));
+  refreshMark(p); renderTeambar();
+  if (state.own) apply();
+}
+function toggleCaught(id) {
+  caught.has(id) ? caught.delete(id) : caught.add(id);
+  store.set("caught", JSON.stringify([...caught]));
+  refreshMark(BY_ID.get(id));
+  apply();
+}
+function renderTeambar() {
+  const bar = $("#teambar");
+  bar.hidden = !team.length;
+  if (!team.length) return;
+  const mons = team.map(id => BY_ID.get(id));
+  bar.innerHTML = `<span class="lbl">Squadra</span>` + mons.map(p =>
+    `<button type="button" class="mon" data-go="${esc(p.id)}" aria-label="${esc(L(p))}" style="--c1:var(--t-${p.types[0]})"><img alt="" src="${SPR(p.spr)}"></button>`).join("") +
+    Array.from({ length: TEAM_MAX - team.length }, () => `<span class="mon empty"></span>`).join("") +
+    `<button type="button" class="an">Analisi</button>`;
+}
+function rerender() {
+  if (current === "team") renderTeam(true);
+  else if (current) renderDetail(current, true);
+}
+
+function renderTeam(keepScroll) {
+  const body = $("#detail");
+  const y = keepScroll && current === "team" ? body.scrollTop : 0;
+  current = "team";
+  $("#sheetTitle").textContent = `La mia squadra (${team.length}/${TEAM_MAX})`;
+  const mons = team.map(id => BY_ID.get(id));
+  if (!mons.length) {
+    body.innerHTML = `<section class="sec"><h3>★ Squadra vuota</h3><p class="note" style="margin:0">Apri un Pokémon e tocca
+      «Aggiungi alla squadra» per averlo sempre a portata di mano nella barra in alto e vedere qui l'analisi della squadra.</p>
+      <div class="acts"><button type="button" class="act" data-addteam>Sfoglia i Pokémon</button></div></section>`;
+    body.scrollTop = 0; return;
+  }
+  const grid = `<div class="tgrid">${mons.map(p => `<button type="button" data-go="${esc(p.id)}" style="--c1:var(--t-${p.types[0]})">` +
+    `<img alt="" src="${SPR(p.spr)}">${esc(L(p))}<span class="rm" data-rm="${esc(p.id)}">Rimuovi</span></button>`).join("")}</div>`;
+
+  // defence: per attacking type, how many members are weak / resist
+  const rows = TYPES.map(t => {
+    const ws = mons.map(p => weaknesses(p.types)[t]);
+    return { t, weak: ws.filter(x => x > 1).length, res: ws.filter(x => x < 1).length };
+  }).sort((a, b) => (b.weak - b.res) - (a.weak - a.res) || b.weak - a.weak);
+  const def = `<table class="mx"><tr><th>Attacco di tipo</th><th>Deboli</th><th>Resistono</th></tr>` + rows.map(r =>
+    `<tr class="${r.weak >= 2 && r.weak > r.res ? "warn" : ""}"><td>${typeBadge(r.t, "sm")}</td>` +
+    `<td class="n ${r.weak ? "bad" : ""}">${r.weak || "–"}</td><td class="n ${r.res ? "ok" : ""}">${r.res || "–"}</td></tr>`).join("") + `</table>`;
+  const danger = rows.filter(r => r.weak >= 2 && r.weak > r.res).map(r => typeName(r.t));
+
+  // offence: types hit super-effectively by the recommended attacking moves
+  const atkTypes = new Set(mons.flatMap(p => p.best.map(b => MOVES[b.m]).filter(m => m && m.cat !== "Status").map(m => m.type)));
+  const hit = TYPES.filter(d => [...atkTypes].some(a => (CHART[a][d] ?? 1) > 1));
+  const miss = TYPES.filter(d => !hit.includes(d));
+  const cov = `<div class="cov">${TYPES.map(t => typeBadge(t, "sm" + (hit.includes(t) ? "" : " off"))).join("")}</div>` +
+    `<p class="note">${miss.length ? `Nessuna mossa consigliata è superefficace contro: <b>${miss.map(typeName).join(", ")}</b>.` : "Copertura completa: colpisci tutti i tipi superefficace!"}</p>`;
+
+  const moves = mons.map(p => `<div class="step" style="grid-template-columns:44px 1fr">` +
+    `<button type="button" data-go="${esc(p.id)}"><img alt="" src="${SPR(p.spr)}"></button>` +
+    `<div style="display:flex;flex-wrap:wrap;gap:4px">${p.best.map(b => MOVES[b.m]).filter(Boolean).map(m =>
+      `<span class="type sm" style="--c:var(--t-${m.type})">${esc(L(m))}</span>`).join("")}</div></div>`).join("");
+
+  body.innerHTML = `
+    <section class="sec"><h3>★ Membri <small>tocca per i dettagli</small></h3>${grid}</section>
+    <section class="sec"><h3>🛡️ Difesa della squadra</h3>
+      ${danger.length ? `<p class="note" style="margin:0 0 10px">⚠️ Punti deboli: <b>${danger.join(", ")}</b> (più membri deboli che resistenti).</p>` : ""}
+      ${def}</section>
+    <section class="sec"><h3>⚔️ Copertura offensiva</h3>${cov}</section>
+    <section class="sec"><h3>📋 Mosse consigliate</h3><div class="steps">${moves}</div></section>`;
+  body.scrollTop = y;
+}
 
 boot().catch(err => { $("#count").textContent = "Errore nel caricamento dei dati."; console.error(err); });
 

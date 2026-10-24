@@ -1,5 +1,5 @@
 // Bump VERSION whenever app files or data change.
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL = `shell-${VERSION}`;
 const IMG = "img-v1";
 const CORE = ["./", "index.html", "styles.css", "app.js", "manifest.webmanifest",
