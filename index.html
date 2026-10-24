@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Unbound Dex</title>
+  <meta name="description" content="Pokédex per Pokémon Unbound: luoghi, evoluzioni, mosse consigliate. EN/IT.">
+  <meta name="theme-color" content="#14161c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Unbound Dex">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top" id="top">
+    <div class="bar">
+      <div class="brand">
+        <span class="ball" aria-hidden="true"></span>
+        <h1>Unbound<span>Dex</span></h1>
+      </div>
+      <button class="lang" id="lang" type="button" aria-label="Cambia lingua nomi">
+        <span data-l="en">EN</span><span data-l="it">IT</span>
+      </button>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 0 1 5.9 12.1l4.2 4.2-1.4 1.4-4.2-4.2A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+      <input id="q" type="search" inputmode="search" autocomplete="off" autocorrect="off" spellcheck="false"
+             placeholder="Nome, numero, tipo, luogo…" enterkeyhint="search">
+      <button id="clear" class="clear" type="button" aria-label="Cancella" hidden>×</button>
+      <button id="filterBtn" class="filter-btn" type="button" aria-label="Filtri">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2l-7 7v5l-4 2v-7L3 7z"/></svg>
+        <b id="filterCount" hidden></b>
+      </button>
+    </div>
+    <div class="chips" id="typeChips" role="group" aria-label="Filtra per tipo"></div>
+  </header>
+
+  <section class="panel" id="filters" hidden>
+    <div class="row">
+      <label>Generazione</label>
+      <div class="seg" id="genSeg"></div>
+    </div>
+    <div class="row">
+      <label>Come ottenerlo</label>
+      <div class="seg" id="howSeg"></div>
+    </div>
+    <div class="row">
+      <label for="moveQ">Impara la mossa</label>
+      <input id="moveQ" type="search" list="moveList" placeholder="es. Earthquake / Terremoto" autocomplete="off">
+      <datalist id="moveList"></datalist>
+    </div>
+    <div class="row two">
+      <div>
+        <label for="sort">Ordina per</label>
+        <select id="sort">
+          <option value="dex">Numero</option>
+          <option value="name">Nome</option>
+          <option value="bst">Statistiche totali</option>
+          <option value="atk">Attacco</option>
+          <option value="spa">Attacco Sp.</option>
+          <option value="spe">Velocità</option>
+        </select>
+      </div>
+      <button class="reset" id="reset" type="button">Azzera filtri</button>
+    </div>
+  </section>
+
+  <main>
+    <p class="count" id="count">Caricamento…</p>
+    <div class="grid" id="grid"></div>
+    <p class="empty" id="empty" hidden>Nessun Pokémon trovato.</p>
+  </main>
+
+  <button class="totop" id="totop" type="button" aria-label="Torna su" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 4 13l1.4 1.4L11 8.8V20h2V8.8l5.6 5.6L20 13z"/></svg>
+  </button>
+
+  <div class="sheet" id="sheet" aria-hidden="true">
+    <div class="sheet-bar">
+      <button id="back" class="icon" type="button" aria-label="Indietro">
+        <svg viewBox="0 0 24 24"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12z"/></svg>
+      </button>
+      <div class="sheet-title" id="sheetTitle"></div>
+      <button id="sheetLang" class="lang small" type="button" aria-label="Cambia lingua nomi">
+        <span data-l="en">EN</span><span data-l="it">IT</span>
+      </button>
+      <button id="sheetSearch" class="icon" type="button" aria-label="Cerca">
+        <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.9 12.1l4.2 4.2-1.4 1.4-4.2-4.2A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="detail"></div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
